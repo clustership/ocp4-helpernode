@@ -1,0 +1,65 @@
+---
+# Setup OCP4 Helper Node
+- name: set setup facts
+  include: set_facts_dhcp.yaml
+
+- name: Install packages for DHCP/PXE install
+  package:
+    name: "{{ dhcppkgs }}"
+    state: present
+  when: False and not staticips
+
+#  - name: Install additional package for Intel platforms
+#    package:
+#      name: "{{ syslinuxpkgs }}"
+#      state: present
+#    when: not staticips and not ppc64le
+
+# - name: Remove existing config files
+#   import_tasks: remove_old_config_files.yaml
+#   when: remove_old_config_files
+
+#    dest: /etc/dhcp/dhcpd.conf
+- name: Write out dhcp file
+  template:
+    src: ../templates/dhcpd.conf.j2
+    dest: /tmp/dhcpd.conf
+  notify:
+    - restart dhcpd
+  when: not staticips
+
+- name: Start firewalld service
+  systemd:
+    name: firewalld
+    state: started
+    enabled: yes
+
+- meta: end_play
+
+#- name: Open up firewall ports
+#  firewalld:
+#    permanent: yes
+#    immediate: yes
+#    state: enabled
+#    port: "{{ item[0] }}"
+#  delegate_to: "{{ item[1] }}"
+#  run_once: true
+#  with_nested:
+#    - "{{ ports }}"
+#    - "{{ ansible_play_batch }}"
+
+- name: Systemd daemon reload
+  systemd:
+    daemon_reload: yes
+  when: not staticips
+
+- name: Starting DHCP/PXE services
+  service:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  with_items:
+    - dhcpd
+    - tftp
+    - helper-tftp
+  when: not staticips

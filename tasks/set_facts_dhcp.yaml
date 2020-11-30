@@ -1,0 +1,33 @@
+---
+- block:
+    - assert: 
+        that: "{{ helper.networkifacename is defined }}"
+    - set_fact: 
+        networkifacename: "{{ helper.networkifacename }}"
+  rescue:
+    - set_fact:
+        networkifacename: "{{ ansible_default_ipv4.interface }}"
+
+- block:
+  - set_fact:
+      packages:
+        - firewalld
+        - vim
+        - bash-completion
+  
+  - set_fact:
+      dhcppkgs:
+        - dhcp-server
+        - tftp-server
+
+  - set_fact:
+      syslinuxpkgs:
+        - syslinux
+
+  # See Fedora Wiki for changes:
+  # https://fedoraproject.org/wiki/Changes/RenameNobodyUser
+  - set_fact:
+      owner: nobody
+      group: nobody
+  
+  when: ansible_distribution_major_version == "8"
