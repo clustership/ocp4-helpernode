@@ -42,7 +42,7 @@
 - name: Write out "{{ dns.domain | lower }}" zone file
   template:
     src: ../templates/zonefile.j2
-    dest: "{{ dns_dir }}/var/named/zonefile.db"
+    dest: "{{ dns_dir }}/var/named/{{ dns.clusterid }}.{{ dns.domain }}.db"
     mode: '0644'
   notify:
     - restart bind
