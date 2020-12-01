@@ -1,0 +1,120 @@
+---
+# Setup OCP4 Helper Node
+
+
+- name: Delete OCP4 files, if requested, to download again
+  file:
+     state: absent
+     path: "{{ item }}"
+  with_items:
+    - "/usr/local/src/openshift-client-linux.tar.gz"
+    - "/usr/local/src/openshift-install-linux.tar.gz"
+    - "/var/www/html/install/bios.raw.gz"
+    - "/var/www/html/install/rootfs.img"
+    - "/var/lib/tftpboot/rhcos/initramfs.img"
+    - "/var/lib/tftpboot/rhcos/kernel"
+  when: force_ocp_download
+
+# - name: Downloading OCP4 installer Bios
+#  get_url:
+#    url: "{{ ocp_bios }}"
+#    dest: /var/www/html/install/bios.raw.gz
+#    mode: 0555
+#  when: ("metal" in ocp_bios) 
+
+# - name: Downloading OCP4 installer rootfs
+#   get_url:
+#     url: "{{ ocp_bios }}"
+#     dest: /var/www/html/install/rootfs.img
+#     mode: 0555
+#   when: ("rootfs" in ocp_bios) 
+
+# - name: Downloading OCP4 installer kernel
+#   get_url:
+#     url: "{{ ocp_install_kernel }}"
+#     dest: /var/lib/tftpboot/rhcos/kernel
+#     mode: 0555
+#   when: not staticips
+
+- name: Downloading OCP4 client
+  get_url:
+    url: "{{ ocp_client }}"
+    dest: /usr/local/src/openshift-client-linux.tar.gz
+
+- name: Downloading OCP4 Installer
+  get_url:
+    url: "{{ ocp_installer }}"
+    dest: /usr/local/src/openshift-install-linux.tar.gz
+
+- name: Unarchiving OCP4 client
+  unarchive:
+    src: /usr/local/src/openshift-client-linux.tar.gz
+    dest: /usr/local/bin
+    remote_src: yes
+
+- name: Unarchiving OCP4 Installer
+  unarchive:
+    src: /usr/local/src/openshift-install-linux.tar.gz
+    dest: /usr/local/bin
+    remote_src: yes
+
+- name: Removing files that are not needed
+  file:
+    path: /usr/local/bin/README.md
+    state: absent
+
+- name: Create helm source directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  with_items:
+    - /usr/local/src/helm
+
+- name: Downloading helm source binary tarball
+  get_url:
+    url: "{{ helm_source }}"
+    dest: /usr/local/src/helm/helm-client.tar.gz
+
+- name: Unarchiving helm tarball
+  unarchive:
+    src: /usr/local/src/helm/helm-client.tar.gz
+    dest: /usr/local/src/helm
+    remote_src: yes
+
+- name: Copy helm cli to bin directory for amd64
+  copy:
+    src: /usr/local/src/helm/linux-amd64/helm
+    dest: /usr/local/bin/helm
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+  when: not ppc64le
+
+- name: Copy helm cli to bin directory for ppc64le
+  copy:
+    src: /usr/local/src/helm/linux-ppc64le/helm
+    dest: /usr/local/bin/helm
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+  when: ppc64le
+
+- name: Downloading filetranspiler source
+  git:
+    repo: https://github.com/ashcrow/filetranspiler
+    dest: /usr/local/src/filetranspiler
+  when: install_filetranspiler
+
+- name: Building filetranspiler
+  shell: "podman build /usr/local/src/filetranspiler -t filetranspiler:latest"
+  when: install_filetranspiler
+
+- name: Installing filetranspiler
+  copy:
+    src: ../files/filetranspiler
+    dest: /usr/local/bin/filetranspiler
+    mode: '0555'
+  when: install_filetranspiler
