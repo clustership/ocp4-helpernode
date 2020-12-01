@@ -1,0 +1,98 @@
+---
+# Setup OCP4 Helper Node
+
+- name: Create dns directories for installing
+  file:
+    path: "{{ dns_dir }}{{ item }}"
+    state: directory
+    mode: 0755
+  with_items:
+    - /etc
+    - /var/named
+
+- name: set setup facts
+  include: set_facts_dns.yaml
+
+- name: Install needed packages
+  package:
+    name: "{{ packages }}"
+    state: present
+
+- name: Write out named file
+  template:
+    src: ../templates/named.conf.j2
+    dest: "{{ dns_dir }}/etc/named.conf"
+  notify:
+    - restart bind
+
+- name: Installing DNS Serialnumber generator
+  copy:
+    src: ../files/set-dns-serial.sh
+    dest: /usr/local/bin/set-dns-serial.sh
+    mode: '0555'
+
+- name: Set zone serial number
+  shell: "/usr/local/bin/set-dns-serial.sh"
+  register: dymanicserialnumber
+
+- name: Setting serial number as a fact
+  set_fact:
+    serialnumber: "{{ dymanicserialnumber.stdout }}"
+
+- name: Write out "{{ dns.domain | lower }}" zone file
+  template:
+    src: ../templates/zonefile.j2
+    dest: "{{ dns_dir }}/var/named/zonefile.db"
+    mode: '0644'
+  notify:
+    - restart bind
+
+- name: Write out reverse zone file
+  template:
+    src: ../templates/reverse.j2
+    dest: "{{ dns_dir }}/var/named/reverse.db"
+    mode: '0644'
+  notify:
+    - restart bind
+
+- name: Open up firewall ports
+  firewalld:
+    permanent: yes
+    immediate: yes
+    state: enabled
+    port: "{{ item[0] }}"
+  delegate_to: "{{ item[1] }}"
+  run_once: true
+  with_nested:
+    - "{{ ports }}"
+    - "{{ ansible_play_batch }}"
+
+- name: Best effort SELinux repair - DNS
+  shell: "restorecon -vR {{ dns_dir }}/var/named || true"
+
+#- name: Set the local resolv.conf file
+#  template:
+#    src: ../templates/resolv.conf.j2
+#    dest: /etc/resolv.conf
+
+#  - name: Get network device system name
+#    shell: "nmcli -t dev show {{ networkifacename }} | grep GENERAL.CONNECTION | cut -d: -f2"
+#    register: devicesystemname
+
+#  - name: Setting network device system name as a fact
+#    set_fact:
+#      dsname: "{{ devicesystemname.stdout }}"
+
+#  - name: Setting DNS server ip on network interface "{{ dsname }}" to 127.0.0.1
+#    shell: 'nmcli con mod "{{ dsname }}" ipv4.dns 127.0.0.1'
+
+#  - name: Setting DNS search path on network interface "{{ dsname }}" to "{{ dns.clusterid }}.{{ dns.domain | lower }}"
+#    shell: 'nmcli con mod  "{{ dsname }}" ipv4.dns-search {{ dns.clusterid }}.{{ dns.domain | lower }}'
+
+#  - name: Restarting NetworkManager
+#    service:
+#      name: "{{ item }}"
+#      state: restarted
+#    with_items:
+#      - NetworkManager
+
